@@ -10,3 +10,4 @@ webapp/
 **/.sdkmanrc
 .sdkmanrc
 /.env.dev
+/run-dev.sh
