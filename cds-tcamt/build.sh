@@ -21,7 +21,7 @@ do
 done
 
 if [ -z "$FHIR_LIB" ]; then
-    echo "FHIR Lib project path is required. (-b)"
+    echo "FHIR Lib project path is required. (-f)"
     exit 1
 fi
 
