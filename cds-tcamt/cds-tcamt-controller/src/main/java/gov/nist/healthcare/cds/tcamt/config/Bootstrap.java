@@ -23,6 +23,7 @@ import gov.nist.healthcare.cds.domain.wrapper.Resources;
 import gov.nist.healthcare.cds.service.TestRunnerService;
 import gov.nist.healthcare.cds.service.VaccineMatcherService;
 import gov.nist.healthcare.cds.service.impl.data.SimpleCodeRemapService;
+import gov.nist.healthcare.cds.service.impl.persist.SimpleDatabaseCleanupService;
 import gov.nist.healthcare.cds.service.impl.validation.ConfigurableVaccineMatcher;
 import gov.nist.healthcare.cds.service.vaccine.VaccineMatcherConfiguration;
 
@@ -56,6 +57,10 @@ public class Bootstrap {
 	@Autowired
 	private SimpleCodeRemapService simpleCodeRemapService;
 
+	@Autowired
+	private SimpleDatabaseCleanupService databaseCleanupService;
+
+	private String ENV_CLEANUP_DATABASE = "fits.admin.cleanup-database";
 	private String ENV_ADMIN_CREATE = "fits.admin.create-if-not-exists";
 	private String ENV_ADMIN_PASSWORD = "fits.admin.password";
 	private String ENV_ADMIN_EMAIL = "fits.admin.email";
@@ -222,6 +227,14 @@ public class Bootstrap {
 		productMapping.put("302:PFR:Pfizer-BioNTech COVID-19 Vaccine (EUA labeled)  COMIRNATY (BLA labeled)", "302:PFR:Pfizer-BioNTech COVID-19 Bivalent, Original + BA.4/BA.5 (Non-US Tradename COMIRNATY Bivalent)");
 
 		productMapping.put("158:SEQ:Afluria, quadrivalent", "158:SEQ:Afluria quadrivalent, with preservative");
+
+		if("true".equals(env.getProperty(ENV_CLEANUP_DATABASE))) {
+			Set<String> whiteListedUsernames = new HashSet<>();
+			Collections.addAll(whiteListedUsernames, "admin", "protected");
+			Set<String> whiteListedEmails = new HashSet<>();
+//			Collections.addAll(whiteListedEmails, "Apple", "Banana", "Orange");
+			this.databaseCleanupService.cleanDatabase(whiteListedUsernames, whiteListedEmails);
+		}
 
 		if (FITS_UPGRADE_REMAP_DISABLE)  {
 			Logger.getLogger(Bootstrap.class.getName()).log(Level.WARNING, "Bootstrap upgrade and remap on testcases disabled, not recommended when changing around versions. Enable with FITS_2_UPGRADE_REMAP_DISABLE=true");
