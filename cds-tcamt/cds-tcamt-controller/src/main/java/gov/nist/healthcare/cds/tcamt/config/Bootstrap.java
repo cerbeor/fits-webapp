@@ -21,9 +21,11 @@ import gov.nist.healthcare.cds.domain.wrapper.Document;
 import gov.nist.healthcare.cds.domain.wrapper.Documents;
 import gov.nist.healthcare.cds.domain.wrapper.Resources;
 import gov.nist.healthcare.cds.service.TestRunnerService;
+import gov.nist.healthcare.cds.service.UserContact;
 import gov.nist.healthcare.cds.service.VaccineMatcherService;
 import gov.nist.healthcare.cds.service.impl.data.SimpleCodeRemapService;
 import gov.nist.healthcare.cds.service.impl.persist.SimpleDatabaseCleanupService;
+import gov.nist.healthcare.cds.service.impl.persist.MongoExaminationService;
 import gov.nist.healthcare.cds.service.impl.validation.ConfigurableVaccineMatcher;
 import gov.nist.healthcare.cds.service.vaccine.VaccineMatcherConfiguration;
 
@@ -72,6 +74,8 @@ public class Bootstrap {
 	private String ENV_EMAIL_FROM = "fits.email.from";
 	private String ENV_EMAIL_SUBJECT = "fits.email.subject";
 	private String ENV_ADAPTER_URL = "fits.adapter.url";
+	@Autowired
+	private MongoExaminationService mongoExaminationService;
 
 	@Bean
 	public String adminEmail() {
@@ -228,11 +232,16 @@ public class Bootstrap {
 
 		productMapping.put("158:SEQ:Afluria, quadrivalent", "158:SEQ:Afluria quadrivalent, with preservative");
 
-		if("true".equals(env.getProperty(ENV_CLEANUP_DATABASE))) {
-			Set<String> whiteListedUsernames = new HashSet<>();
-			Collections.addAll(whiteListedUsernames, "admin", "protected");
-			Set<String> whiteListedEmails = new HashSet<>();
+		Set<String> whiteListedUsernames = new HashSet<>();
+		Collections.addAll(whiteListedUsernames, "admin", "protected", "clem");
+		Set<String> whiteListedEmails = new HashSet<>();
 //			Collections.addAll(whiteListedEmails, "Apple", "Banana", "Orange");
+		List<UserContact> contacts =  this.mongoExaminationService.findUsersToContact(4,whiteListedUsernames,whiteListedEmails);
+		Logger.getLogger(Bootstrap.class.getName()).log(Level.INFO, "Found {0} contacts", contacts.size());
+		for(UserContact contact : contacts){
+			Logger.getLogger(Bootstrap.class.getName()).log(Level.INFO, "Found contact {0}", contact.getEmail());
+		}
+		if("true".equals(env.getProperty(ENV_CLEANUP_DATABASE))) {
 			this.databaseCleanupService.cleanDatabase(whiteListedUsernames, whiteListedEmails);
 		}
 
