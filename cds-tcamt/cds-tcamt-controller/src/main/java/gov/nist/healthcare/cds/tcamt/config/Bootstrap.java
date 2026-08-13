@@ -237,9 +237,9 @@ public class Bootstrap {
 		Set<String> whiteListedEmails = new HashSet<>();
 //			Collections.addAll(whiteListedEmails, "Apple", "Banana", "Orange");
 		List<UserContact> contacts =  this.mongoExaminationService.findUsersToContact(4,whiteListedUsernames,whiteListedEmails);
-		Logger.getLogger(Bootstrap.class.getName()).log(Level.INFO, "Found {0} contacts", contacts.size());
+		Logger.getLogger(Bootstrap.class.getName()).log(Level.INFO, "[DATABASE EVAL] Found {0} contacts", contacts.size());
 		for(UserContact contact : contacts){
-			Logger.getLogger(Bootstrap.class.getName()).log(Level.INFO, "Found contact {0}", contact.getEmail());
+			Logger.getLogger(Bootstrap.class.getName()).log(Level.INFO, "[DATABASE EVAL] Found contact {0}", contact.getEmail());
 		}
 		if("true".equals(env.getProperty(ENV_CLEANUP_DATABASE))) {
 			this.databaseCleanupService.cleanDatabase(whiteListedUsernames, whiteListedEmails);
