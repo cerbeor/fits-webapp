@@ -46,3 +46,11 @@ RUN sed -i '/<\/web-app>/i \
     <\/error-page>\n' /usr/local/tomcat/conf/web.xml
 COPY ./error.html /usr/local/tomcat/webapps/ROOT/error.html
 COPY --from=builder /app/cds-tcamt-controller/target/fits.war /usr/local/tomcat/webapps/fits.war
+
+
+COPY ./dev.docker.env /usr/local/tomcat/.env.dev
+COPY dev/dev-entrypoint.sh /usr/local/tomcat/entrypoint.sh
+RUN chmod +x /usr/local/tomcat/entrypoint.sh
+
+EXPOSE 9095
+ENTRYPOINT ["/usr/local/tomcat/entrypoint.sh"]

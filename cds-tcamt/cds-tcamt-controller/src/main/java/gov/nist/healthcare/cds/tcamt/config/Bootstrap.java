@@ -63,6 +63,8 @@ public class Bootstrap {
 	private SimpleDatabaseCleanupService databaseCleanupService;
 
 	private String ENV_CLEANUP_DATABASE = "fits.admin.cleanup-database";
+	private String ENV_CLEANUP_WHITELIST_USERNAMES = "fits.admin.cleanup-whitelist.usernames";
+	private String ENV_CLEANUP_WHITELIST_EMAILS = "fits.admin.cleanup-whitelist.emails";
 	private String ENV_ADMIN_CREATE = "fits.admin.create-if-not-exists";
 	private String ENV_ADMIN_PASSWORD = "fits.admin.password";
 	private String ENV_ADMIN_EMAIL = "fits.admin.email";
@@ -173,6 +175,25 @@ public class Bootstrap {
 		}
 	}
 	
+	/**
+	 * Reads a comma separated property (usually fed by an environment variable) as a set of
+	 * trimmed, non empty values. Returns an empty set when the property is absent or blank.
+	 */
+	private Set<String> commaSeparatedProperty(String property) {
+		Set<String> values = new HashSet<>();
+		String raw = env.getProperty(property);
+		if(Strings.isNullOrEmpty(raw)) {
+			return values;
+		}
+		for(String value : raw.split(",")) {
+			String trimmed = value.trim();
+			if(!trimmed.isEmpty()) {
+				values.add(trimmed);
+			}
+		}
+		return values;
+	}
+
 	public void createPrivileges(){
 		Privilege p;
 		String pr = "";
@@ -232,14 +253,19 @@ public class Bootstrap {
 
 		productMapping.put("158:SEQ:Afluria, quadrivalent", "158:SEQ:Afluria quadrivalent, with preservative");
 
-		Set<String> whiteListedUsernames = new HashSet<>();
-		Collections.addAll(whiteListedUsernames, "admin", "protected", "clem");
-		Set<String> whiteListedEmails = new HashSet<>();
-//			Collections.addAll(whiteListedEmails, "Apple", "Banana", "Orange");
-		List<UserContact> contacts =  this.mongoExaminationService.findUsersToContact(4,whiteListedUsernames,whiteListedEmails);
+		// Whitelists are configured through FITS_CLEANUP_WHITELIST_USERNAMES / FITS_CLEANUP_WHITELIST_EMAILS
+		// as comma separated lists. "admin" and "protected" are always kept, whatever the configuration is.
+		Set<String> whiteListedUsernames = this.commaSeparatedProperty(ENV_CLEANUP_WHITELIST_USERNAMES);
+		Collections.addAll(whiteListedUsernames, "admin", "protected");
+		Set<String> whiteListedEmails = this.commaSeparatedProperty(ENV_CLEANUP_WHITELIST_EMAILS);
+		Logger.getLogger(Bootstrap.class.getName()).log(Level.INFO, "[DATABASE EVAL] Whitelisted {0} username(s) and {1} email(s)", new Object[]{whiteListedUsernames.size(), whiteListedEmails.size()});
+		List<UserContact> contacts =  this.mongoExaminationService.findUsersToContact(5, whiteListedUsernames,whiteListedEmails);
 		Logger.getLogger(Bootstrap.class.getName()).log(Level.INFO, "[DATABASE EVAL] Found {0} contacts", contacts.size());
 		for(UserContact contact : contacts){
-			Logger.getLogger(Bootstrap.class.getName()).log(Level.INFO, "[DATABASE EVAL] Found contact {0}", contact.getEmail());
+			Logger.getLogger(Bootstrap.class.getName()).log(Level.INFO, "[DATABASE EVAL] Found contact {0}", contact);
+		}
+		for(UserContact contact : contacts){
+			System.out.println(contact.getEmail());
 		}
 		if("true".equals(env.getProperty(ENV_CLEANUP_DATABASE))) {
 			this.databaseCleanupService.cleanDatabase(whiteListedUsernames, whiteListedEmails);
