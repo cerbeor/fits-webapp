@@ -14,6 +14,7 @@ import com.google.common.base.Strings;
 import gov.nist.fhir.client.ir.TestRunnerServiceFhirImpl;
 import gov.nist.healthcare.cds.auth.domain.Account;
 import gov.nist.healthcare.cds.auth.domain.Privilege;
+import gov.nist.healthcare.cds.auth.repo.AccountRepository;
 import gov.nist.healthcare.cds.auth.repo.PrivilegeRepository;
 import gov.nist.healthcare.cds.auth.service.AccountService;
 import gov.nist.healthcare.cds.domain.wrapper.AppInfo;
@@ -29,6 +30,7 @@ import gov.nist.healthcare.cds.service.impl.persist.MongoExaminationService;
 import gov.nist.healthcare.cds.service.impl.validation.ConfigurableVaccineMatcher;
 import gov.nist.healthcare.cds.service.vaccine.VaccineMatcherConfiguration;
 
+import org.springframework.beans.factory.access.BootstrapException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -55,6 +57,9 @@ public class Bootstrap {
 	
 	@Autowired
 	private AccountService accService;
+
+	@Autowired
+	private AccountRepository accountRepository;
 
 	@Autowired
 	private SimpleCodeRemapService simpleCodeRemapService;
@@ -174,7 +179,29 @@ public class Bootstrap {
 			System.out.println("[ADMIN USER NOT CREATED] admin user already exists, or password and email not provided");
 		}
 	}
-	
+
+
+	public void overrideUserEmail(String username, String newEmail) {
+		Account accountByUsername = this.accService.getAccountByUsername(username);
+		Account accountByEmail = this.accountRepository.findByEmailIgnoreCase(newEmail);
+
+		if(accountByEmail != null) {
+			if (accountByEmail.getUsername().equalsIgnoreCase(username)) {
+				System.out.println("[ADMIN USER UPDATED] Email already in use " + newEmail);
+				return;
+			}
+			throw new BootstrapException("[Account for EMAIL Override ALREADY EXISTS] " + newEmail);
+		}
+		if(accountByUsername == null ) {
+			System.out.println("[User Email Override] Invalid account username: " + accountByUsername);
+		} else {
+			String oldEmail = accountByUsername.getEmail();
+			accountByUsername.setEmail(newEmail);
+			this.accountRepository.save(accountByUsername);
+			System.out.println("[User Email Override] Account username: " + accountByUsername.getUsername() + ", email " + oldEmail + " overriden to new email: " + newEmail);
+		}
+	}
+
 	/**
 	 * Reads a comma separated property (usually fed by an environment variable) as a set of
 	 * trimmed, non empty values. Returns an empty set when the property is absent or blank.
@@ -259,14 +286,14 @@ public class Bootstrap {
 		Collections.addAll(whiteListedUsernames, "admin", "protected");
 		Set<String> whiteListedEmails = this.commaSeparatedProperty(ENV_CLEANUP_WHITELIST_EMAILS);
 		Logger.getLogger(Bootstrap.class.getName()).log(Level.INFO, "[DATABASE EVAL] Whitelisted {0} username(s) and {1} email(s)", new Object[]{whiteListedUsernames.size(), whiteListedEmails.size()});
-		List<UserContact> contacts =  this.mongoExaminationService.findUsersToContact(5, whiteListedUsernames,whiteListedEmails);
-		Logger.getLogger(Bootstrap.class.getName()).log(Level.INFO, "[DATABASE EVAL] Found {0} contacts", contacts.size());
-		for(UserContact contact : contacts){
-			Logger.getLogger(Bootstrap.class.getName()).log(Level.INFO, "[DATABASE EVAL] Found contact {0}", contact);
-		}
-		for(UserContact contact : contacts){
-			System.out.println(contact.getEmail());
-		}
+//		List<UserContact> contacts =  this.mongoExaminationService.findUsersToContact(5, whiteListedUsernames,whiteListedEmails);
+//		Logger.getLogger(Bootstrap.class.getName()).log(Level.INFO, "[DATABASE EVAL] Found {0} contacts", contacts.size());
+//		for(UserContact contact : contacts){
+//			Logger.getLogger(Bootstrap.class.getName()).log(Level.INFO, "[DATABASE EVAL] Found contact {0}", contact);
+//		}
+//		for(UserContact contact : contacts){
+//			System.out.println(contact.getEmail());
+//		}
 		if("true".equals(env.getProperty(ENV_CLEANUP_DATABASE))) {
 			this.databaseCleanupService.cleanDatabase(whiteListedUsernames, whiteListedEmails);
 		}
@@ -284,5 +311,7 @@ public class Bootstrap {
 			);
 		}
 	}
+
+
 	
 }
