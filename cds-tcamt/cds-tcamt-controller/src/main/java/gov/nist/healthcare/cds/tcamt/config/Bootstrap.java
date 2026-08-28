@@ -22,7 +22,6 @@ import gov.nist.healthcare.cds.domain.wrapper.Document;
 import gov.nist.healthcare.cds.domain.wrapper.Documents;
 import gov.nist.healthcare.cds.domain.wrapper.Resources;
 import gov.nist.healthcare.cds.service.TestRunnerService;
-import gov.nist.healthcare.cds.service.UserContact;
 import gov.nist.healthcare.cds.service.VaccineMatcherService;
 import gov.nist.healthcare.cds.service.impl.data.SimpleCodeRemapService;
 import gov.nist.healthcare.cds.service.impl.persist.SimpleDatabaseCleanupService;
@@ -200,6 +199,51 @@ public class Bootstrap {
 			this.accountRepository.save(accountByUsername);
 			System.out.println("[User Email Override] Account username: " + accountByUsername.getUsername() + ", email " + oldEmail + " overriden to new email: " + newEmail);
 		}
+	}
+
+	/**
+	 * Overrides the id (the Mongo _id) of the account matching the given username.
+	 *
+	 * The _id of a document is immutable, so the rename is done by removing the existing document
+	 * and re-inserting the very same account under the new id. Nothing else in the database points
+	 * at an account _id : test plans, test cases, reports, software configs, validation jobs, user
+	 * metadata and password resets all key off the username, so no other collection is migrated here.
+	 */
+	public void overrideUserId(String username, String newId) {
+		if(Strings.isNullOrEmpty(newId)) {
+			throw new BootstrapException("[User Id Override] Empty new id provided for username: " + username);
+		}
+
+		Account account = this.accService.getAccountByUsername(username);
+		if(account == null) {
+			System.out.println("[User Id Override] Invalid account username: " + username);
+			return;
+		}
+
+		String oldId = account.getId();
+		if(newId.equals(oldId)) {
+			System.out.println("[User Id Override] Account username: " + username + " already has id: " + newId);
+			return;
+		}
+
+		Account accountById = this.accountRepository.findOne(newId);
+		if(accountById != null) {
+			throw new BootstrapException("[Account for ID Override ALREADY EXISTS] " + newId + " is used by username: " + accountById.getUsername());
+		}
+
+		if(oldId != null) {
+			this.accountRepository.delete(oldId);
+		}
+		account.setId(newId);
+		try {
+			this.accountRepository.save(account);
+		} catch (RuntimeException e) {
+			// never leave the account deleted : put it back under the id it had before the override
+			account.setId(oldId);
+			this.accountRepository.save(account);
+			throw new BootstrapException("[User Id Override] Could not save account username: " + username + " under new id: " + newId, e);
+		}
+		System.out.println("[User Id Override] Account username: " + username + ", id " + oldId + " overriden to new id: " + newId);
 	}
 
 	/**
