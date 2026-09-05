@@ -190,11 +190,14 @@ jobs:
           # The repo's own Dockerfile compiles everything inside the image
           # build (handy on a laptop, redundant here — the client and war are
           # already built above). The image for deployment is assembly-only:
-          # tomcat + error pages + the war, pinned at .github/docker/Dockerfile
-          # so changes to the repo Dockerfile can't alter what ships.
+          # tomcat + error pages + the war + the deployment branding, pinned
+          # at .github/docker/Dockerfile so changes to the repo Dockerfile
+          # can't alter what ships. The context is the repository root so the
+          # branding files under .github/docker/brand are reachable; the root
+          # .dockerignore keeps everything else out of it.
           SHA_TAG="sha-${GITHUB_SHA::7}"
           docker buildx build --platform linux/amd64 \
             -f "$GITHUB_WORKSPACE/.github/docker/Dockerfile" \
-            -t "$ECR_REPO:$SHA_TAG" -t "$ECR_REPO:candidate" --push .
+            -t "$ECR_REPO:$SHA_TAG" -t "$ECR_REPO:candidate" --push "$GITHUB_WORKSPACE"
           echo "Pushed $ECR_REPO:$SHA_TAG (also tagged :candidate)."
           echo "Nothing is deployed yet — promote the candidate from Mission Control."

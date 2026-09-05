@@ -1,0 +1,8 @@
+# The deployment image is assembly-only (.github/docker/Dockerfile): it needs
+# the built war, the error page and the branding files, nothing else. Without
+# this the build context would carry the client's node_modules and the whole
+# maven target tree.
+*
+!.github/docker/brand/
+!cds-tcamt/error.html
+!cds-tcamt/cds-tcamt-controller/target/fits.war

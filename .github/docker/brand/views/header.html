@@ -1,0 +1,32 @@
+<style id="antiClickjack">body {
+    display: none !important;
+}</style> <script type="text/javascript">if (self === top) {
+        var antiClickjack = document.getElementById("antiClickjack");
+        antiClickjack.parentNode.removeChild(antiClickjack);
+    } else {
+        top.location = self.location;
+    }</script> <div class="navbar navbar-default" role="navigation"> <!--style="position: fixed; z-index : 1000; height: 85px; width: 98%;">--> <div class="brand" id="appheader"> <div class="hosted-lockup"><a class="mb appheader-mb" href="https://valitheus.com" target="_blank" rel="noopener" title="Hosted by Valitheus">
+<span class="mb-eyebrow">Hosted&nbsp;by</span>
+<svg class="vt-mark" width="26" height="26" viewBox="0 0 64 64" role="img" aria-label="Valitheus">
+<defs>
+<linearGradient id="vt-grad" x1="6" y1="0" x2="50" y2="0" gradientUnits="userSpaceOnUse">
+<stop offset="0" stop-color="#0F766E"/>
+<stop offset="1" stop-color="#2DD4BF"/>
+</linearGradient>
+<pattern id="vt-grid-minor" width="8" height="8" patternUnits="userSpaceOnUse">
+<path d="M8,0 L0,0 L0,8" fill="none" stroke="rgba(94,234,212,0.07)" stroke-width="0.7"/>
+</pattern>
+<pattern id="vt-grid-major" width="24" height="24" patternUnits="userSpaceOnUse">
+<path d="M24,0 L0,0 L0,24" fill="none" stroke="rgba(94,234,212,0.11)" stroke-width="0.7"/>
+</pattern>
+</defs>
+<rect width="64" height="64" rx="14" fill="#0F172A" stroke="rgba(255,255,255,0.10)"/>
+<rect x="1" y="1" width="62" height="62" rx="13" fill="url(#vt-grid-minor)"/>
+<rect x="1" y="1" width="62" height="62" rx="13" fill="url(#vt-grid-major)"/>
+<path d="M6,26 L14,26 L16,21 L18,29 L20,26 L24,26 L31,41.5 L50.5,12" fill="none" stroke="url(#vt-grad)" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="50.5" cy="12" r="5" fill="rgba(230,255,250,0.22)"/>
+<circle cx="50.5" cy="12" r="2.1" fill="#E6FFFA"/>
+</svg>
+<span class="vt-word">VALI<span class="vt-word-accent">THEUS</span></span>
+</a>
+</div> <a style="display: inline-block; text-shadow:none" href="#"> <div id="programbrand"><span class="pb-tick"></span><span class="pb-text">Standards &amp; Interoperability Testing Tools (SITT)</span></div> <div id="apptitle"> <span>Forecasting for Immunization Test Suite (FITS)</span> <span style="color:red; font-size:12px"> {{appInfo.version}}</span> </div> </a> </div> <div class="navbar-collapse collapse" style="padding-left : 0px; padding-right: 0px"> <ul class="nav navbar-nav"> <li ng-class="activeWhen(path()=='/home')"> <a class="point" href="#/home"><i class="fa fa-home"></i>&nbsp;<span msg key="navbar.home"></span></a> </li> <li ng-class="activeWhen(path()=='/tp')"><a class="point" href="#/tp"><i class="fa fa-book"></i>&nbsp;<span msg class="msg" key="navbar.tps"></span></a></li> <li ng-class="activeWhen(path()=='/validation')"><a class="point" href="#/validation"><i class="fa fa-check"></i> &nbsp;<span class="msg">Validation</span></a></li> <li ng-class="activeWhen(path()=='/doc')"><a class="point" href="#/doc"><i class="fa fa-file-text"></i>&nbsp;<span msg class="msg" key="navbar.documentation"></span></a></li> <li ng-class="activeWhen(path()=='/about')"><a class="point" href="#/about"><i class="fa fa-info"></i>&nbsp;About</a> </li> <!--<li ng-class="activeWhen(path()=='/glossary')"><a class="point" href="#/glossary"><i--> <!--class="fa fa-file-text"></i>&nbsp;<span msg class="msg" key="navbar.glossary"></span></a></li>--> <li ng-class="activeWhen(path()=='/issue')"><a class="point" href="#/issue"><i class="fa fa-question"></i>&nbsp;Issues</a> </li> <li ng-show="showSpinner()"><i class="fa fa-spinner fa-pulse fa-align-center"></i></li> </ul> <ul class="nav navbar-nav navbar-right" style="margin-right: 2px"> <li ng-class="activeWhen(path()=='/registration')" ng-show="!isAuthenticated()"> <a href="#/registration"> <div msg key="navbar.registration"></div> </a> </li> <li ng-class="activeWhen(path()=='/forgotten')" ng-show="!isAuthenticated()"> <a href="#/forgotten"> <div msg key="navbar.forgotten"></div> </a> </li> <li ng-show="isAuthenticated()" ng-class="activeWhen(path()=='/useraccount')"><a class="point" href="#/useraccount"><i class="fa fa-user"></i>&nbsp;My Account</a></li> <!--<li ng-class="activeWhen(path()=='/usermanagement')" ng-show="isAuthenticated() && isAdmin()">--> <!--<a class="point" href="#/usermanagement"><i class="fa fa-user"></i>&nbsp;<span> User Management</span></a>--> <!--</li>--> <li class="" ng-show="isAuthenticated()"> <a class="point" ng-click="logout()"><i class="fa fa-sign-out"></i>&nbsp;<span msg class="msg" key="navbar.logout"></span></a> </li> <li class="" ng-show="!isAuthenticated()"> <a class="point" ng-click="loginReq()"><i class="fa fa-sign-in"></i>&nbsp;<span msg class="msg" key="navbar.login"></span></a> </li> </ul> </div> </div>

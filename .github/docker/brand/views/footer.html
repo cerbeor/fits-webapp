@@ -1,0 +1,42 @@
+<style id="antiClickjack">body{display:none !important;}</style> <script type="text/javascript">if (self === top) {
+        var antiClickjack = document.getElementById("antiClickjack");
+        antiClickjack.parentNode.removeChild(antiClickjack);
+    } else {
+        top.location = self.location;
+    }</script>
+<div id="footer">
+  <hr style="margin-top :  0">
+  <table>
+    <tbody>
+    <tr>
+      <td class="box">
+        <div>
+          <h5>Application Information</h5>
+          <span>Date: {{appInfo.date | date: 'MM/dd/yyyy HH:mm:ss'}}, </span>
+          <span>Application Version: {{appInfo.version}}</span>
+        </div>
+      </td>
+      <td class="box">
+        <div>
+          <h5>Supported Browsers</h5>
+          <span><i class="fa fa-firefox"></i> Firefox, <i class="fa fa-chrome"></i> Chrome, <i class="fa fa-safari"></i> Safari</span>
+        </div>
+      </td>
+      <td class="box">
+        <div ng-if="appInfo.adminEmail != null && appInfo.adminEmail != ''">
+          <h5>External Links</h5>
+          <a class="footer-link" ng-href="mailto:{{appInfo.adminEmail}}" title="Email Website Administrator @: {{appInfo.adminEmail}}">Website Administrator</a>
+        </div>
+      </td>
+    </tr>
+    </tbody>
+  </table>
+  <div class="managed-by">
+    <span class="prev-nist">Previously known as the NIST tools</span>
+    <a class="mb" href="https://prometheuscomputing.com" target="_blank" rel="noopener" title="Managed by Prometheus Computing">
+      <span class="mb-eyebrow">Managed&nbsp;by</span>
+      <span class="mb-mark"></span>
+      <span class="mb-name">Prometheus Computing</span>
+    </a>
+  </div>
+</div>
