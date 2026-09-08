@@ -64,6 +64,10 @@ public class Bootstrap {
 	private String ENV_EMAIL_PORT = "fits.email.port";
 	private String ENV_EMAIL_PROTOCOL = "fits.email.protocol";
 	private String ENV_EMAIL_SMTP_AUTH = "fits.email.smtp.auth";
+	private String ENV_EMAIL_USERNAME = "fits.email.username";
+	private String ENV_EMAIL_PASSWORD = "fits.email.password";
+	private String ENV_EMAIL_STARTTLS = "fits.email.starttls";
+	private String ENV_EMAIL_DEBUG = "fits.email.debug";
 	private String ENV_EMAIL_FROM = "fits.email.from";
 	private String ENV_EMAIL_SUBJECT = "fits.email.subject";
 	private String ENV_ADAPTER_URL = "fits.adapter.url";
@@ -89,9 +93,18 @@ public class Bootstrap {
 		mailSender.setHost(env.getProperty(ENV_EMAIL_HOST));
 		mailSender.setPort(Integer.parseInt(env.getProperty(ENV_EMAIL_PORT)));
 		mailSender.setProtocol(env.getProperty(ENV_EMAIL_PROTOCOL));
+		// A relay that authenticates needs a login and a TLS upgrade; an open
+		// relay needs neither. Both come from configuration so one build serves
+		// either. Debug output lists every recipient, so it is off unless asked.
+		String username = env.getProperty(ENV_EMAIL_USERNAME);
+		if (username != null && !username.isEmpty()) {
+			mailSender.setUsername(username);
+			mailSender.setPassword(env.getProperty(ENV_EMAIL_PASSWORD));
+		}
 		Properties javaMailProperties = new Properties();
-		javaMailProperties.setProperty("mail.smtp.auth",env.getProperty(ENV_EMAIL_SMTP_AUTH));
-		javaMailProperties.setProperty("mail.debug","true");
+		javaMailProperties.setProperty("mail.smtp.auth",env.getProperty(ENV_EMAIL_SMTP_AUTH, "false"));
+		javaMailProperties.setProperty("mail.smtp.starttls.enable",env.getProperty(ENV_EMAIL_STARTTLS, "false"));
+		javaMailProperties.setProperty("mail.debug",env.getProperty(ENV_EMAIL_DEBUG, "false"));
 		mailSender.setJavaMailProperties(javaMailProperties);
 		return mailSender;
 	}
