@@ -42,6 +42,16 @@
 			<groupId>io.springfox</groupId>
 			<artifactId>springfox-staticdocs</artifactId>
 			<version>2.4.0</version>
+			<exclusions>
+				<!-- Pulls in mailapi 1.4.3, whose com.sun.mail.util classes clash
+				     with javax.mail 1.6.2 below. Which copy wins depends on the
+				     order Tomcat happens to list WEB-INF/lib, so mail works on
+				     some boots and throws NoSuchMethodError on others. -->
+				<exclusion>
+					<groupId>javax.mail</groupId>
+					<artifactId>mailapi</artifactId>
+				</exclusion>
+			</exclusions>
 		</dependency>
 		<dependency>
 			<groupId>com.sun.mail</groupId>

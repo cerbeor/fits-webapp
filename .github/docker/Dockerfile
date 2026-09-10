@@ -44,12 +44,34 @@ RUN set -eux; \
 #   the marker onto the app's one line and the next strip-to-EOF would delete
 #   the whole file: split, strip, prove the app rules survived, terminate with
 #   a newline, then append.
-COPY .github/docker/brand/views/header.html .github/docker/brand/views/footer.html /tmp/tpl/views/
+COPY .github/docker/brand/views/header.html .github/docker/brand/views/footer.html .github/docker/brand/views/about.html /tmp/tpl/views/
 COPY .github/docker/brand/sitt-branding.css /tmp/tpl/
 RUN set -eux; \
     WAR=/usr/local/tomcat/webapps/fits.war; \
     test -f "$WAR"; \
+    \
+    # One JavaMail only. mailapi 1.4.3 next to javax.mail 1.6.2 makes the
+    # mailer fail with NoSuchMethodError on boots where Tomcat lists it first.
+    jar tf "$WAR" | grep -q '^WEB-INF/lib/javax.mail-1.6.2.jar$'; \
+    ! jar tf "$WAR" | grep -q '^WEB-INF/lib/mailapi-'; \
+    \
     cd /tmp; mkdir -p brand; cd brand; \
+    \
+    # about: the approved standard disclaimer and notices plus the data use
+    # language, replacing the NIST-only page wholesale (the shipped file is one
+    # line). The release notes table and version/date bindings are kept.
+    cp /tmp/tpl/views/about.html .; \
+    grep -q 'ng-controller="AboutCtrl"' about.html; \
+    grep -q 'releaseNote in releaseNotes' about.html; \
+    grep -q '{{appInfo.version}}' about.html; \
+    grep -q '<strong>Tool Information</strong>' about.html; \
+    grep -q '<strong>Funding Sources</strong>' about.html; \
+    grep -q '<strong>HIPAA Notice</strong>' about.html; \
+    grep -q '<strong>Account Ownership and Organizational Content</strong>' about.html; \
+    grep -q '<strong>Tool Administration and Operational Access</strong>' about.html; \
+    ! grep -q 'NIST assumes no responsibility whatsoever' about.html; \
+    mkdir -p views; mv about.html views/; \
+    jar uf "$WAR" views/about.html; \
     \
     cp /tmp/tpl/views/header.html /tmp/tpl/views/footer.html .; \
     grep -q 'Standards &amp; Interoperability Testing Tools (SITT)' header.html; \
