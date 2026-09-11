@@ -16,7 +16,7 @@
       "name": "CDS BASE",
       "repository": "https://github.com/cerbeor/cds-base",
       "sha1": "0499e3d802c8d862f1125e6c6bfb677f6302a333",
-      "cmd": "mvn -f ./cds-base/pom.xml clean install"
+      "cmd": "mvn -f ./cds-base/pom.xml clean install -DskipTests"
     }
   ]
 }

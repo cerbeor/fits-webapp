@@ -4,7 +4,7 @@
 	<parent>
 		<groupId>gov.nist.healthcare.cds.tcamt</groupId>
 		<artifactId>cds-tcamt</artifactId>
-		<version>1.4.6</version>
+		<version>1.4.7</version>
 	</parent>
 	<artifactId>cds-tcamt-controller</artifactId>
 	<packaging>war</packaging>
@@ -13,7 +13,7 @@
 		<spring.version>4.1.3.RELEASE</spring.version>
 		<junit.version>4.11</junit.version>
 		<logback.version>1.0.13</logback.version>
-		<cds-base.version>1.1.2-SNAPSHOT</cds-base.version>
+		<cds-base.version>1.1.2-SNAPSHOT-2</cds-base.version>
 		<timestamp>${maven.build.timestamp}</timestamp>
 		<maven.build.timestamp.format>MM-dd-yyyy</maven.build.timestamp.format>
 	</properties>
@@ -176,9 +176,9 @@
 					<include>**/*</include>
 				</includes>
 				<!-- application.properties is copied by the filtered resource above. Without this
-				     exclude the unfiltered pass copies it a second time and overwrites the filtered
-				     output, so @version@ / @timestamp@ reach the war verbatim and the appInfo bean
-				     dies at startup with 'Unparseable date: "@timestamp@"'. -->
+exclude the unfiltered pass copies it a second time and overwrites the filtered
+output, so @version@ / @timestamp@ reach the war verbatim and the appInfo bean
+dies at startup with 'Unparseable date: "@timestamp@"'. -->
 				<excludes>
 					<exclude>application.properties</exclude>
 				</excludes>
