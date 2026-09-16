@@ -6,9 +6,14 @@
 #
 # The client and war are built with the same recipes cds-tcamt/Dockerfile
 # uses, so a CI artifact matches a local `docker build` of that Dockerfile.
-# Reimplementing the client build here is what broke it before: the toolchain
-# is pinned by cds-tcamt-client/package-lock.json (bower 1.3.12), and an
-# install that ignores that lock resolves a different frontend tree.
+# Reimplementing the client build here is what broke it before. The client
+# toolchain is pinned by cds-tcamt-client/package-lock.json; installing with
+# --no-package-lock floated uglify-js from the locked 2.3.6 to 2.4.24, and
+# 2.4.24 mis-mangles angular-moment-picker's isSelectable() — the outer
+# $scope reference collides with the catch parameter, so every date picker
+# threw "Cannot read properties of undefined (reading 'isAfterOrEqualMin')"
+# and no calendar ever opened. Nothing in the build output said so, because
+# `grunt build || grunt build --force` swallowed the cdnify abort too.
 
 name: build-image
 
@@ -123,8 +128,10 @@ jobs:
       # /etc/app running dev/in-container-compilation.sh. That image carries
       # the node 8 / compass / phantomjs / git-protocol-rewrite setup this
       # 2016-era toolchain needs, and the script's plain `npm install` honours
-      # package-lock.json — which is what pins bower to 1.3.12 and keeps the
-      # resolved frontend tree identical to a local build.
+      # package-lock.json — which is what holds uglify-js at 2.3.6 and makes
+      # this build reproduce the master artifact byte for byte (scripts.js and
+      # main.css hash identically to the shipped nist775hit/fits-webapp image).
+      # Do not add --no-package-lock here; see the header for what that broke.
       #
       # The cache mounts only save downloads; they are keyed by resolved
       # version, so the lockfile still decides what gets installed.
