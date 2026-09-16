@@ -3,6 +3,12 @@
 # never writes — promotion to :latest happens from Mission Control after a
 # human approves the candidate, so a push here can never change what runs
 # by itself. Full flow: aws-migration repo, docs/FITS_CICD_SPEC.md.
+#
+# The client and war are built with the same recipes cds-tcamt/Dockerfile
+# uses, so a CI artifact matches a local `docker build` of that Dockerfile.
+# Reimplementing the client build here is what broke it before: the toolchain
+# is pinned by cds-tcamt-client/package-lock.json (bower 1.3.12), and an
+# install that ignores that lock resolves a different frontend tree.
 
 name: build-image
 
@@ -34,7 +40,8 @@ jobs:
 
       # All Maven traffic goes through our Nexus (anonymous read). The
       # mirrorOf=* also overrides the hardcoded repository URLs some of
-      # these poms still carry from their previous home.
+      # these poms still carry from their previous home — including the
+      # sibling repos dependencies.sh builds from source.
       - name: maven settings
         working-directory: .
         run: |
@@ -78,18 +85,22 @@ jobs:
           </settings>
           XML
 
+      # dependencies.json pins the sibling repos by SHA, so a change there
+      # means different artifacts land in the repository.
       - name: cache maven repo
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository
-          key: m2-${{ hashFiles('**/pom.xml') }}
+          key: m2-${{ hashFiles('**/pom.xml', 'cds-tcamt/cds-tcamt-controller/dependencies.json') }}
           restore-keys: m2-
 
+      # package-lock.json governs the whole client toolchain (bower included),
+      # so it belongs in the key.
       - name: cache client toolchain
         uses: actions/cache@v4
         with:
           path: .cache
-          key: client-${{ hashFiles('cds-tcamt/cds-tcamt-client/package.json', 'cds-tcamt/cds-tcamt-client/bower.json') }}
+          key: client-${{ hashFiles('cds-tcamt/cds-tcamt-client/package-lock.json', 'cds-tcamt/cds-tcamt-client/bower.json') }}
           restore-keys: client-
 
       # The DAP include reports usage to the federal analytics program and
@@ -107,69 +118,63 @@ jobs:
             exit 1
           fi
 
-      # Angular client. grunt 0.4 / graceful-fs@3 breaks on newer node
-      # ("primordials is not defined") so this needs node 10, and the sass
-      # toolchain needs the pinned ruby gems. Same container recipe the
-      # local builds use.
+      # Angular client, built exactly the way cds-tcamt/Dockerfile stage 1 and
+      # dev/docker-compose-ui-compilation.yml build it: the dev image at
+      # /etc/app running dev/in-container-compilation.sh. That image carries
+      # the node 8 / compass / phantomjs / git-protocol-rewrite setup this
+      # 2016-era toolchain needs, and the script's plain `npm install` honours
+      # package-lock.json — which is what pins bower to 1.3.12 and keeps the
+      # resolved frontend tree identical to a local build.
+      #
+      # The cache mounts only save downloads; they are keyed by resolved
+      # version, so the lockfile still decides what gets installed.
       - name: build client
         run: |
-          mkdir -p "$GITHUB_WORKSPACE/.cache/npm" "$GITHUB_WORKSPACE/.cache/bower" "$GITHUB_WORKSPACE/.cache/gems"
-          docker run --rm \
-            -e CI=true -e PHANTOMJS_SKIP_DOWNLOAD=true \
-            -e NPM_CONFIG_CACHE=/cache/npm -e BOWER_STORAGE__CACHE=/cache/bower \
-            -v "$PWD:/workspace" \
-            -v "$GITHUB_WORKSPACE/.cache/npm:/cache/npm" \
-            -v "$GITHUB_WORKSPACE/.cache/bower:/cache/bower" \
-            -v "$GITHUB_WORKSPACE/.cache/gems:/cache/gems" \
-            -w /workspace/cds-tcamt-client node:10-buster bash -lc '
-              set -euo pipefail
-              # buster is EOL; its apt sources moved to the archive
-              sed -i -e "s|deb.debian.org/debian|archive.debian.org/debian|g" \
-                     -e "s|security.debian.org|archive.debian.org|g" \
-                     -e "/buster-updates/d" /etc/apt/sources.list
-              apt-get -o Acquire::Check-Valid-Until=false update -qq
-              apt-get install -y -qq --no-install-recommends ruby-full build-essential python make g++ ca-certificates git >/dev/null
-              export GEM_HOME=/cache/gems
-              export PATH="$GEM_HOME/bin:$PATH"
-              git config --global url."https://github.com/".insteadOf git://github.com/
-              # karma-jasmine-jquery is test-only and pins a git:// URL in its
-              # registry manifest, which no longer resolves anywhere (and npm
-              # bypasses the git rewrite for it). The build never runs tests,
-              # so drop it before install.
-              node -e "const fs=require(\"fs\");const p=JSON.parse(fs.readFileSync(\"package.json\"));delete p.devDependencies[\"karma-jasmine-jquery\"];fs.writeFileSync(\"package.json\",JSON.stringify(p,null,2))"
-              rm -rf node_modules
-              npm install --unsafe-perm --ignore-scripts --no-package-lock
-              npm install -g bower grunt-cli
-              # ruby 2.5: modern ffi wants ruby >= 3, so pin the classic trio
-              command -v compass >/dev/null || {
-                gem install ffi -v 1.12.2 --no-document
-                gem install sass -v 3.4.25 --no-document
-                gem install multi_json -v 1.15.0 --no-document
-                gem install compass -v 1.0.3 --no-document
-              }
-              bower install --allow-root --config.interactive=false
-              grunt build || grunt build --force
-            '
+          mkdir -p "$GITHUB_WORKSPACE/.cache/npm" "$GITHUB_WORKSPACE/.cache/bower"
+          chmod +x dev/in-container-compilation.sh
+          docker run --rm --platform linux/amd64 \
+            -v "$PWD:/etc/app" \
+            -v "$GITHUB_WORKSPACE/.cache/npm:/root/.npm" \
+            -v "$GITHUB_WORKSPACE/.cache/bower:/root/.cache/bower" \
+            -w /etc/app \
+            --entrypoint ./dev/in-container-compilation.sh \
+            nist775hit/fits-dev-environment:latest
           test -f cds-tcamt-controller/src/main/webapp/index.html
 
+      # War, exactly as cds-tcamt/Dockerfile stage 2 builds it. The dev image
+      # cannot do this one: its default java is 11 and it has no jq.
+      # build-with-dependencies.sh clones and builds hit-stats-logger, fhirLib
+      # and cds-base at the SHAs dependencies.json pins, then runs
+      # `mvn -f cds-tcamt-controller/pom.xml clean install` — so the backend
+      # artifacts are the pinned sources rather than whatever sits in the
+      # snapshots repo. The controller has no test sources, so the script's
+      # unqualified `clean install` runs nothing extra.
       - name: build war
         run: |
-          docker run --rm \
+          docker run --rm --platform linux/amd64 \
             -v "$PWD:/src" \
             -v "$HOME/.m2/repository:/root/.m2/repository" \
             -v "$HOME/.m2/settings.xml:/root/.m2/settings.xml:ro" \
-            -w /src/cds-tcamt-controller maven:3.9-eclipse-temurin-8 \
-            mvn -B -DskipTests clean install
-          # the container ran as root, so its outputs are root-owned on the
-          # host — take them back before patching the war
-          sudo chown -R "$(id -u):$(id -g)" cds-tcamt-controller/target
-          # maven leaves these placeholders unfiltered; patch them inside the war
-          V=$(grep -m1 "<version>" cds-tcamt-controller/pom.xml | sed 's/[^0-9.]*//g')
-          rm -rf /tmp/warfix && mkdir -p /tmp/warfix
-          unzip -o -q cds-tcamt-controller/target/fits.war WEB-INF/classes/application.properties -d /tmp/warfix
-          sed -i -e "s/@timestamp@/$(date +%m-%d-%Y)/" -e "s/@version@/${V}/" /tmp/warfix/WEB-INF/classes/application.properties
+            -w /src eclipse-temurin:8-jdk bash -euxc '
+              apt-get update
+              apt-get install -y --no-install-recommends git maven jq
+              chmod +x ./cds-tcamt-controller/dependencies.sh \
+                       ./cds-tcamt-controller/build-with-dependencies.sh
+              ./cds-tcamt-controller/build-with-dependencies.sh
+            '
+          # both containers ran as root, so their outputs — the built webapp,
+          # the client's node_modules/bower_components, the war and the maven
+          # repository — are root-owned on the host. Take them back before
+          # anything else reads or caches them.
+          sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE" "$HOME/.m2"
+
           WAR="$PWD/cds-tcamt-controller/target/fits.war"
-          (cd /tmp/warfix && zip -q "$WAR" WEB-INF/classes/application.properties)
+          # the pom filters application.properties; if that regresses the
+          # appInfo bean dies at startup on 'Unparseable date: "@timestamp@"'
+          if unzip -p "$WAR" WEB-INF/classes/application.properties | grep -q '@version@\|@timestamp@'; then
+            echo "maven did not filter application.properties" >&2
+            exit 1
+          fi
           # the war must not carry the analytics include
           if unzip -p "$WAR" index.html | grep -q "digitalgov\|googletagmanager"; then
             echo "analytics include made it into the war" >&2
@@ -189,12 +194,12 @@ jobs:
         run: |
           # The repo's own Dockerfile compiles everything inside the image
           # build (handy on a laptop, redundant here — the client and war are
-          # already built above). The image for deployment is assembly-only:
-          # tomcat + error pages + the war + the deployment branding, pinned
-          # at .github/docker/Dockerfile so changes to the repo Dockerfile
-          # can't alter what ships. The context is the repository root so the
-          # branding files under .github/docker/brand are reachable; the root
-          # .dockerignore keeps everything else out of it.
+          # already built above with its exact recipes). The image for
+          # deployment is assembly-only: tomcat + error pages + the war + the
+          # deployment branding, pinned at .github/docker/Dockerfile so changes
+          # to the repo Dockerfile can't alter what ships. The context is the
+          # repository root so the branding files under .github/docker/brand
+          # are reachable; the root .dockerignore keeps everything else out.
           SHA_TAG="sha-${GITHUB_SHA::7}"
           docker buildx build --platform linux/amd64 \
             -f "$GITHUB_WORKSPACE/.github/docker/Dockerfile" \
