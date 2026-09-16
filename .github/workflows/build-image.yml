@@ -148,40 +148,24 @@ jobs:
             nist775hit/fits-dev-environment:latest
           test -f cds-tcamt-controller/src/main/webapp/index.html
 
-      # War, exactly as cds-tcamt/Dockerfile stage 2 builds it. The dev image
-      # cannot do this one: its default java is 11 and it has no jq.
-      # build-with-dependencies.sh clones and builds hit-stats-logger, fhirLib
-      # and cds-base at the SHAs dependencies.json pins, then runs
-      # `mvn -f cds-tcamt-controller/pom.xml clean install` — so the backend
-      # artifacts are the pinned sources rather than whatever sits in the
-      # snapshots repo. The controller has no test sources, so the script's
-      # unqualified `clean install` runs nothing extra.
       - name: build war
         run: |
-          docker run --rm --platform linux/amd64 \
+          docker run --rm \
             -v "$PWD:/src" \
             -v "$HOME/.m2/repository:/root/.m2/repository" \
             -v "$HOME/.m2/settings.xml:/root/.m2/settings.xml:ro" \
-            -w /src eclipse-temurin:8-jdk bash -euxc '
-              apt-get update
-              apt-get install -y --no-install-recommends git maven jq
-              chmod +x ./cds-tcamt-controller/dependencies.sh \
-                       ./cds-tcamt-controller/build-with-dependencies.sh
-              ./cds-tcamt-controller/build-with-dependencies.sh
-            '
-          # both containers ran as root, so their outputs — the built webapp,
-          # the client's node_modules/bower_components, the war and the maven
-          # repository — are root-owned on the host. Take them back before
-          # anything else reads or caches them.
-          sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE" "$HOME/.m2"
-
+            -w /src/cds-tcamt-controller maven:3.9-eclipse-temurin-8 \
+            mvn -B -DskipTests clean install
+          # the container ran as root, so its outputs are root-owned on the
+          # host — take them back before patching the war
+          sudo chown -R "$(id -u):$(id -g)" cds-tcamt-controller/target
+          # maven leaves these placeholders unfiltered; patch them inside the war
+          V=$(grep -m1 "<version>" cds-tcamt-controller/pom.xml | sed 's/[^0-9.]*//g')
+          rm -rf /tmp/warfix && mkdir -p /tmp/warfix
+          unzip -o -q cds-tcamt-controller/target/fits.war WEB-INF/classes/application.properties -d /tmp/warfix
+          sed -i -e "s/@timestamp@/$(date +%m-%d-%Y)/" -e "s/@version@/${V}/" /tmp/warfix/WEB-INF/classes/application.properties
           WAR="$PWD/cds-tcamt-controller/target/fits.war"
-          # the pom filters application.properties; if that regresses the
-          # appInfo bean dies at startup on 'Unparseable date: "@timestamp@"'
-          if unzip -p "$WAR" WEB-INF/classes/application.properties | grep -q '@version@\|@timestamp@'; then
-            echo "maven did not filter application.properties" >&2
-            exit 1
-          fi
+          (cd /tmp/warfix && zip -q "$WAR" WEB-INF/classes/application.properties)
           # the war must not carry the analytics include
           if unzip -p "$WAR" index.html | grep -q "digitalgov\|googletagmanager"; then
             echo "analytics include made it into the war" >&2
@@ -201,7 +185,7 @@ jobs:
         run: |
           # The repo's own Dockerfile compiles everything inside the image
           # build (handy on a laptop, redundant here — the client and war are
-          # already built above with its exact recipes). The image for
+          # already built above with its exact recipe for the client). The image for
           # deployment is assembly-only: tomcat + error pages + the war + the
           # deployment branding, pinned at .github/docker/Dockerfile so changes
           # to the repo Dockerfile can't alter what ships. The context is the
