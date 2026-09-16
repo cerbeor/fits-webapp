@@ -145,7 +145,7 @@ jobs:
             -v "$GITHUB_WORKSPACE/.cache/bower:/root/.cache/bower" \
             -w /etc/app \
             --entrypoint ./dev/in-container-compilation.sh \
-            nist775hit/fits-dev-environment:latest
+            nist775hit/fits-dev-environment@sha256:63168e288ada129f2c2ffe97cf967b0b1658dd14241ce073f35f35faf97ecdbd
           test -f cds-tcamt-controller/src/main/webapp/index.html
 
       - name: build war
