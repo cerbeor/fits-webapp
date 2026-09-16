@@ -45,8 +45,9 @@ jobs:
 
       # All Maven traffic goes through our Nexus (anonymous read). The
       # mirrorOf=* also overrides the hardcoded repository URLs some of
-      # these poms still carry from their previous home — including the
-      # sibling repos dependencies.sh builds from source.
+      # these poms still carry from their previous home. The sibling
+      # artifacts (hit-stats-logger, fhirLib, cds-base) are resolved from
+      # here rather than built from source, so snapshots must stay enabled.
       - name: maven settings
         working-directory: .
         run: |
@@ -90,17 +91,15 @@ jobs:
           </settings>
           XML
 
-      # dependencies.json pins the sibling repos by SHA, so a change there
-      # means different artifacts land in the repository.
       - name: cache maven repo
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository
-          key: m2-${{ hashFiles('**/pom.xml', 'cds-tcamt/cds-tcamt-controller/dependencies.json') }}
+          key: m2-${{ hashFiles('**/pom.xml') }}
           restore-keys: m2-
 
-      # package-lock.json governs the whole client toolchain (bower included),
-      # so it belongs in the key.
+      # package-lock.json is what fixes the grunt/uglify toolchain, so it is
+      # the file that must invalidate this cache.
       - name: cache client toolchain
         uses: actions/cache@v4
         with:
@@ -148,6 +147,11 @@ jobs:
             nist775hit/fits-dev-environment@sha256:63168e288ada129f2c2ffe97cf967b0b1658dd14241ce073f35f35faf97ecdbd
           test -f cds-tcamt-controller/src/main/webapp/index.html
 
+      # War from the already-built webapp, resolving every dependency from
+      # Nexus. Note the placeholder patching below is now a no-op: commit
+      # 7f378ce fixed the duplicate unfiltered resource pass in the controller
+      # pom, so maven already emits a real app.version/app.date. It is kept as
+      # a belt-and-braces guard and costs nothing.
       - name: build war
         run: |
           docker run --rm \
