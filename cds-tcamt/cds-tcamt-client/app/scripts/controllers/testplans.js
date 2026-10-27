@@ -2265,7 +2265,7 @@ angular
                 }
             });
 
-            $rootScope.$on('tp_import_success',function (event,result) {
+            var offImportSuccess = $rootScope.$on('tp_import_success',function (event,result) {
                 PopUp.stop();
                 var tp = result.testPlan;
                 if(tp){
@@ -2284,7 +2284,7 @@ angular
                 });
             });
 
-            $rootScope.$on('tp_import_failure',function (event,result) {
+            var offImportFailure = $rootScope.$on('tp_import_failure',function (event,result) {
                 PopUp.stop();
 
                 $scope.sum = $modal.open({
@@ -2296,6 +2296,16 @@ angular
                         }
                     }
                 });
+            });
+
+            // These are registered on $rootScope because the import events are
+            // broadcast from the entityImport directive's isolate scope. $rootScope
+            // outlives this route controller, so deregister them explicitly or every
+            // re-entry into /tp leaves a stale listener behind and one import opens
+            // one summary dialog per past instance.
+            $scope.$on('$destroy', function () {
+                offImportSuccess();
+                offImportFailure();
             });
 
             $rootScope.$on('start_import',function (event) {
