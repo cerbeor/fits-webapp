@@ -335,7 +335,7 @@ app.filter("sanitize", ['$sce', function($sce) {
 
 
 
-app.run(function ($rootScope, $anchorScroll, $location, Restangular, $modal, $filter, base64, userInfoService, $http, AppInfo,StorageService,$templateCache,$window,notifications) {
+app.run(function ($rootScope, $anchorScroll, $location, Restangular, $modal, $filter, base64, userInfoService, $http, AppInfo,StorageService,$templateCache,$window,notifications,LoginRedirectService) {
     $rootScope.appInfo = {};
     $rootScope.releaseNotes = [
         {
@@ -432,7 +432,15 @@ app.run(function ($rootScope, $anchorScroll, $location, Restangular, $modal, $fi
         }
         $rootScope.requests401 = [];
 
-        $location.url('/ig');
+        // Only send the user somewhere after an interactive login from a public
+        // page. This event also fires once the session is resolved on a cold page
+        // load, and redirecting then would throw the user off whatever deep link
+        // they actually opened (e.g. /tp). There is no '/ig' route, so the old
+        // unconditional redirect fell through to otherwise -> '/'.
+        var target = LoginRedirectService.targetFor($location.path());
+        if (target !== null) {
+            $location.url(target);
+        }
     });
 
     /*jshint sub: true */

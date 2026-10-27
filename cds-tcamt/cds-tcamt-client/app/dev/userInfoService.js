@@ -26,8 +26,8 @@ angular.module('tcl').factory('userLoaderService', ['userInfo', '$q',
     }
 ]);
 
-angular.module('tcl').factory('userInfoService', ['$cookieStore', 'userLoaderService',
-    function($cookieStore, userLoaderService) {
+angular.module('tcl').factory('userInfoService', ['$cookieStore', 'userLoaderService', '$q',
+    function($cookieStore, userLoaderService, $q) {
         var currentUser = {
         		username : "gcr46",
         		accountId : 45,
@@ -127,10 +127,17 @@ angular.module('tcl').factory('userInfoService', ['$cookieStore', 'userLoaderSer
         	return true;
         };
 
+        // Returns a promise so callers can wait for the session to be resolved
+        // before issuing authenticated requests. Previously this returned nothing,
+        // so a cold page load raced its own data fetches against the user lookup.
         var loadFromServer = function() {
-            if ( !isAuthenticated() ) {
-                userLoaderService.load().then(setCurrentUser);
+            if ( isAuthenticated() ) {
+                return $q.when(currentUser);
             }
+            return userLoaderService.load().then(function (user) {
+                setCurrentUser(user);
+                return user;
+            });
         };
 
         var setCurrentUser = function(newUser) {

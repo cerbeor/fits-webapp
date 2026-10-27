@@ -2,7 +2,19 @@
 
 angular.module('tcl').controller('MainCtrl', ['DataSynchService','TestObjectUtil','$scope', '$rootScope', 'i18n', '$location', 'userInfoService', '$modal', 'Restangular', '$filter', 'base64', '$http', 'Idle', 'notifications', 'IdleService','AutoSaveService','StorageService',
     function (DataSynchService,TestObjectUtil, $scope, $rootScope, i18n, $location, userInfoService, $modal, Restangular, $filter, base64, $http, Idle,notifications,IdleService,AutoSaveService,StorageService) {
-        userInfoService.loadFromServer();
+        // Resolve the session before anything else runs. Route controllers such as
+        // TestPlanCtrl fire their ng-init data loads immediately on a cold page load,
+        // so without this the first authenticated request can go out before the
+        // session is known and come back 401, leaving the view silently empty.
+        // Broadcasting 'event:loginConfirmed' lets those controllers reload once the
+        // user is actually known.
+        userInfoService.loadFromServer().then(function () {
+            if (userInfoService.isAuthenticated()) {
+                $rootScope.$broadcast('event:loginConfirmed');
+            }
+        }, function () {
+            // No session: the 401 interceptors already surface the login dialog.
+        });
         $rootScope.loginDialog = null;
         $rootScope.timezone = moment().format('UTC');
         $rootScope.printDate = function(str){
