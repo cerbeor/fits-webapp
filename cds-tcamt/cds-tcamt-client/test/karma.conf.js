@@ -11,6 +11,7 @@ module.exports = function (config) {
             // services without bootstrapping the whole application.
             'test/module.js',
             'app/scripts/services/loginRedirectService.js',
+            'app/scripts/controllers/testplans.js',
             'test/spec/**/*.js'
         ],
         exclude: [],

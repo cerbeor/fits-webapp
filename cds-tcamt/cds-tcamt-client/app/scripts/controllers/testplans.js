@@ -979,8 +979,15 @@ angular
                 return !~$scope.noDatesSS.indexOf(ss);
             };
 
+            // Retagging a test case can push it outside the active workflow filter,
+            // making it vanish from the tree right after it was edited. Widen the
+            // filter to 'ALL' in that case only: previously this assigned the new
+            // tag to the filter, which kept the edited case visible but hid every
+            // other one and silently discarded the filter the user had set.
             $scope.switchWorkflow = function (x) {
-                $scope.tcFilter.wft = x;
+                if (!$filter('workflow')([{ workflowTag: x }], $scope.tcFilter.wft).length) {
+                    $scope.tcFilter.wft = 'ALL';
+                }
             };
 
             $scope.serieStatusChange = function (ss,fct) {
