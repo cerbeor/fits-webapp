@@ -987,6 +987,10 @@ angular
             $scope.switchWorkflow = function (x) {
                 if (!$filter('workflow')([{ workflowTag: x }], $scope.tcFilter.wft).length) {
                     $scope.tcFilter.wft = 'ALL';
+                    $scope.notify({
+                        severity : EntityService.severity.WARNING,
+                        message : "Workflow filter set to All so the test case stays visible"
+                    });
                 }
             };
 
