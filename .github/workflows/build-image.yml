@@ -141,8 +141,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .cache
-          key: client-${{ hashFiles('cds-tcamt/cds-tcamt-client/package-lock.json', 'cds-tcamt/cds-tcamt-client/bower.json') }}
-          restore-keys: client-
+          key: client-v2-${{ hashFiles('cds-tcamt/cds-tcamt-client/package-lock.json', 'cds-tcamt/cds-tcamt-client/bower.json') }}
+          restore-keys: client-v2-
 
       # The DAP include reports usage to the federal analytics program and
       # has no place on our hosting. Strip it from the sources before the
@@ -169,13 +169,34 @@ jobs:
       # main.css hash identically to the shipped nist775hit/fits-webapp image).
       # Do not add --no-package-lock here; see the header for what that broke.
       #
+      # Everything here runs as a single uid — the runner's — with HOME and
+      # both caches under /cache, outside the 0700 /root. That combination is
+      # the fix for a three-part failure peculiar to Linux runners.
+      #
+      # npm 6 de-escalates child processes to the owning uid of the working
+      # directory. A Linux bind mount preserves real ownership, so /etc/app
+      # arrives owned by the runner user and npm's children run as that uid
+      # while npm itself stays root. Docker Desktop reports bind mounts as
+      # uid 0, so none of this happens on a laptop and compose never needed
+      # it. Three consequences, each of which had to be fixed:
+      #   - the image's git rewrite lives in /root/.gitconfig and /root is
+      #     mode 0700, so the de-escalated git child cannot read it. Without
+      #     the rewrite, a dep pinned to git://github.com/bessdsv/bower-
+      #     installer.git is fetched over port 9418, which GitHub turned off
+      #     in 2022, and the install hangs until it times out. Hence the
+      #     same rewrite mounted at the world-readable /etc/gitconfig.
+      #   - a cache under /root/.npm is likewise unreachable, so npm falls
+      #     back to ~/.npm and leaves the half-written .staging tree behind
+      #     ("ENOENT ... node_modules/.staging/..."). Hence /cache.
+      #   - with npm root but its children not, the cache dirs root creates
+      #     are unwritable to the git child ("_cacache/tmp/git-clone-...:
+      #     Permission denied"). Hence one uid for the whole run.
+      # HOME must move too: the runner uid has no home in this image, and
+      # npm resolves its cache and config relative to HOME before the env
+      # override applies.
+      #
       # The cache mounts only save downloads; they are keyed by resolved
-      # version, so the lockfile still decides what gets installed. They sit
-      # at /cache, NOT under /root: npm runs as the workspace's owning uid
-      # (see below) and /root is mode 0700, so a cache mounted at /root/.npm
-      # is unreachable to it. npm then silently falls back to ~/.npm for that
-      # uid, and the half-written .staging tree that results is what produced
-      # the "ENOENT ... node_modules/.staging/..." warnings.
+      # version, so the lockfile still decides what gets installed.
       #
       # The mounted /etc/gitconfig is what makes this work on a Linux runner.
       # One of the tree's deps resolves to git://github.com/bessdsv/bower-
@@ -195,10 +216,8 @@ jobs:
       # directory owner, not the current uid.
       - name: build client
         run: |
-          mkdir -p "$GITHUB_WORKSPACE/.cache/npm" "$GITHUB_WORKSPACE/.cache/bower"
-          # the build runs as the workspace uid, so the caches must be
-          # writable by it rather than only by root
-          chmod -R 777 "$GITHUB_WORKSPACE/.cache"
+          mkdir -p "$GITHUB_WORKSPACE/.cache/npm" "$GITHUB_WORKSPACE/.cache/bower" \
+                   "$GITHUB_WORKSPACE/.cache/home"
           chmod +x dev/in-container-compilation.sh
           # same rewrite the image carries in /root/.gitconfig, placed where
           # every uid can read it; see the note above
@@ -209,19 +228,18 @@ jobs:
           	insteadOf = git@github.com:
           GITCFG
           docker run --rm --platform linux/amd64 \
+            --user "$(id -u):$(id -g)" \
             -v "$RUNNER_TEMP/gitconfig:/etc/gitconfig:ro" \
             -v "$PWD:/etc/app" \
             -v "$GITHUB_WORKSPACE/.cache/npm:/cache/npm" \
             -v "$GITHUB_WORKSPACE/.cache/bower:/cache/bower" \
+            -v "$GITHUB_WORKSPACE/.cache/home:/cache/home" \
+            -e HOME=/cache/home \
             -e npm_config_cache=/cache/npm \
             -e bower_storage__packages=/cache/bower \
             -w /etc/app \
             --entrypoint ./dev/in-container-compilation.sh \
             nist775hit/fits-dev-environment@sha256:63168e288ada129f2c2ffe97cf967b0b1658dd14241ce073f35f35faf97ecdbd
-          # npm runs parts of the build as root, so some outputs and cache
-          # entries come back root-owned — hand them back before the war step
-          # and before actions/cache tries to save .cache as the runner user
-          sudo chown -R "$(id -u):$(id -g)" . "$GITHUB_WORKSPACE/.cache"
           test -f cds-tcamt-controller/src/main/webapp/index.html
 
       # War from the already-built webapp, resolving every dependency from
