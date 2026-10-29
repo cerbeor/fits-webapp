@@ -170,7 +170,12 @@ jobs:
       # Do not add --no-package-lock here; see the header for what that broke.
       #
       # The cache mounts only save downloads; they are keyed by resolved
-      # version, so the lockfile still decides what gets installed.
+      # version, so the lockfile still decides what gets installed. They sit
+      # at /cache, NOT under /root: npm runs as the workspace's owning uid
+      # (see below) and /root is mode 0700, so a cache mounted at /root/.npm
+      # is unreachable to it. npm then silently falls back to ~/.npm for that
+      # uid, and the half-written .staging tree that results is what produced
+      # the "ENOENT ... node_modules/.staging/..." warnings.
       #
       # The mounted /etc/gitconfig is what makes this work on a Linux runner.
       # One of the tree's deps resolves to git://github.com/bessdsv/bower-
@@ -191,6 +196,9 @@ jobs:
       - name: build client
         run: |
           mkdir -p "$GITHUB_WORKSPACE/.cache/npm" "$GITHUB_WORKSPACE/.cache/bower"
+          # the build runs as the workspace uid, so the caches must be
+          # writable by it rather than only by root
+          chmod -R 777 "$GITHUB_WORKSPACE/.cache"
           chmod +x dev/in-container-compilation.sh
           # same rewrite the image carries in /root/.gitconfig, placed where
           # every uid can read it; see the note above
@@ -203,8 +211,10 @@ jobs:
           docker run --rm --platform linux/amd64 \
             -v "$RUNNER_TEMP/gitconfig:/etc/gitconfig:ro" \
             -v "$PWD:/etc/app" \
-            -v "$GITHUB_WORKSPACE/.cache/npm:/root/.npm" \
-            -v "$GITHUB_WORKSPACE/.cache/bower:/root/.cache/bower" \
+            -v "$GITHUB_WORKSPACE/.cache/npm:/cache/npm" \
+            -v "$GITHUB_WORKSPACE/.cache/bower:/cache/bower" \
+            -e npm_config_cache=/cache/npm \
+            -e bower_storage__packages=/cache/bower \
             -w /etc/app \
             --entrypoint ./dev/in-container-compilation.sh \
             nist775hit/fits-dev-environment@sha256:63168e288ada129f2c2ffe97cf967b0b1658dd14241ce073f35f35faf97ecdbd
