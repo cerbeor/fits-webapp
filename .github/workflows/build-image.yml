@@ -172,34 +172,45 @@ jobs:
       # The cache mounts only save downloads; they are keyed by resolved
       # version, so the lockfile still decides what gets installed.
       #
-      # --user 0:0 and unsafe-perm keep npm running as root, which is what
-      # makes this work on a Linux runner at all. npm 6 drops privileges to
-      # the *owning uid of the working directory* before it shells out, and a
-      # Linux bind mount preserves real ownership, so /etc/app arrives owned
-      # by the runner user (1001) and npm de-escalates to it. HOME then stops
-      # resolving to /root, the image's /root/.gitconfig goes unread, and its
-      # `url.https://.insteadOf git://` rewrite never applies — so bower-
-      # installer's git:// dependency is fetched over port 9418, which GitHub
-      # turned off in 2022, and npm install dies on a connection timeout.
-      # Docker Desktop reports every bind-mounted file as uid 0, which is why
-      # the same command succeeds on a laptop and why compose never needed
-      # this. Running as root restores the laptop's conditions rather than
-      # adding privilege — it is also what cds-tcamt/Dockerfile stage 1 does.
+      # The mounted /etc/gitconfig is what makes this work on a Linux runner.
+      # One of the tree's deps resolves to git://github.com/bessdsv/bower-
+      # installer.git, and GitHub turned off the git protocol (port 9418) in
+      # 2022, so that URL only works if git rewrites it to https. The image
+      # ships that rewrite in /root/.gitconfig — but /root is mode 0700, and
+      # npm 6 drops privileges to the owning uid of the working directory
+      # before it shells out to git. A Linux bind mount preserves real
+      # ownership, so /etc/app arrives owned by the runner user and the git
+      # child, as that uid, cannot read /root/.gitconfig: the rewrite is
+      # skipped and the fetch hangs until it times out. Docker Desktop reports
+      # bind-mounted files as uid 0, which is why the same command succeeds on
+      # a laptop and why compose never needed this. /etc/gitconfig is the
+      # system-wide file, world-readable, so the rewrite applies whatever uid
+      # npm lands on — no root required, and outputs stay runner-owned.
+      # --user 0:0 alone does NOT fix this: npm's de-escalation keys off the
+      # directory owner, not the current uid.
       - name: build client
         run: |
           mkdir -p "$GITHUB_WORKSPACE/.cache/npm" "$GITHUB_WORKSPACE/.cache/bower"
           chmod +x dev/in-container-compilation.sh
-          docker run --rm --platform linux/amd64 --user 0:0 \
-            -e npm_config_unsafe_perm=true \
+          # same rewrite the image carries in /root/.gitconfig, placed where
+          # every uid can read it; see the note above
+          cat > "$RUNNER_TEMP/gitconfig" <<'GITCFG'
+          [url "https://"]
+          	insteadOf = git://
+          [url "https://github.com/"]
+          	insteadOf = git@github.com:
+          GITCFG
+          docker run --rm --platform linux/amd64 \
+            -v "$RUNNER_TEMP/gitconfig:/etc/gitconfig:ro" \
             -v "$PWD:/etc/app" \
             -v "$GITHUB_WORKSPACE/.cache/npm:/root/.npm" \
             -v "$GITHUB_WORKSPACE/.cache/bower:/root/.cache/bower" \
             -w /etc/app \
             --entrypoint ./dev/in-container-compilation.sh \
             nist775hit/fits-dev-environment@sha256:63168e288ada129f2c2ffe97cf967b0b1658dd14241ce073f35f35faf97ecdbd
-          # the container ran as root, so the client outputs, node_modules,
-          # bower_components and the warm caches are all root-owned on the
-          # host — hand them back before the war step and the cache save
+          # npm runs parts of the build as root, so some outputs and cache
+          # entries come back root-owned — hand them back before the war step
+          # and before actions/cache tries to save .cache as the runner user
           sudo chown -R "$(id -u):$(id -g)" . "$GITHUB_WORKSPACE/.cache"
           test -f cds-tcamt-controller/src/main/webapp/index.html
 
