@@ -213,14 +213,14 @@ jobs:
             exit 1
           fi
 
-      - name: aws login
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::708499050170:role/healthit-prod-github-fits1
-          aws-region: us-east-2
-
-      - name: ecr login
-        uses: aws-actions/amazon-ecr-login@v2
+#      - name: aws login
+#        uses: aws-actions/configure-aws-credentials@v4
+#        with:
+#          role-to-assume: arn:aws:iam::708499050170:role/healthit-prod-github-fits1
+#          aws-region: us-east-2
+#
+#      - name: ecr login
+#        uses: aws-actions/amazon-ecr-login@v2
 
       - name: push candidate image
         run: |
