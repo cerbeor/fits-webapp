@@ -171,17 +171,36 @@ jobs:
       #
       # The cache mounts only save downloads; they are keyed by resolved
       # version, so the lockfile still decides what gets installed.
+      #
+      # --user 0:0 and unsafe-perm keep npm running as root, which is what
+      # makes this work on a Linux runner at all. npm 6 drops privileges to
+      # the *owning uid of the working directory* before it shells out, and a
+      # Linux bind mount preserves real ownership, so /etc/app arrives owned
+      # by the runner user (1001) and npm de-escalates to it. HOME then stops
+      # resolving to /root, the image's /root/.gitconfig goes unread, and its
+      # `url.https://.insteadOf git://` rewrite never applies — so bower-
+      # installer's git:// dependency is fetched over port 9418, which GitHub
+      # turned off in 2022, and npm install dies on a connection timeout.
+      # Docker Desktop reports every bind-mounted file as uid 0, which is why
+      # the same command succeeds on a laptop and why compose never needed
+      # this. Running as root restores the laptop's conditions rather than
+      # adding privilege — it is also what cds-tcamt/Dockerfile stage 1 does.
       - name: build client
         run: |
           mkdir -p "$GITHUB_WORKSPACE/.cache/npm" "$GITHUB_WORKSPACE/.cache/bower"
           chmod +x dev/in-container-compilation.sh
-          docker run --rm --platform linux/amd64 \
+          docker run --rm --platform linux/amd64 --user 0:0 \
+            -e npm_config_unsafe_perm=true \
             -v "$PWD:/etc/app" \
             -v "$GITHUB_WORKSPACE/.cache/npm:/root/.npm" \
             -v "$GITHUB_WORKSPACE/.cache/bower:/root/.cache/bower" \
             -w /etc/app \
             --entrypoint ./dev/in-container-compilation.sh \
             nist775hit/fits-dev-environment@sha256:63168e288ada129f2c2ffe97cf967b0b1658dd14241ce073f35f35faf97ecdbd
+          # the container ran as root, so the client outputs, node_modules,
+          # bower_components and the warm caches are all root-owned on the
+          # host — hand them back before the war step and the cache save
+          sudo chown -R "$(id -u):$(id -g)" . "$GITHUB_WORKSPACE/.cache"
           test -f cds-tcamt-controller/src/main/webapp/index.html
 
       # War from the already-built webapp, resolving every dependency from
