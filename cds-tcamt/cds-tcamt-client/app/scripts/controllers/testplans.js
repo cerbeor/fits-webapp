@@ -118,6 +118,77 @@ angular.module('tcl').filter('dateMD', function () {
 });
 
 
+angular.module('tcl').filter('tcOrder', function () {
+    // Orders test cases after the filter pipe has run. A plain orderBy is not
+    // enough here: uid is a string, so it would give #1, #10, #2.
+    //
+    // Dates are read from metaData.dateCreated / dateLastUpdated directly.
+    // testObjectService.sanitizeDates would hydrate those epoch numbers into
+    // Date objects on underscore-prefixed siblings, and the dateMD filter
+    // above still reads those — but every call site of sanitizeDates is
+    // commented out, so the _ fields do not exist on a test case and reading
+    // them sorted nothing. Accept either shape: a raw epoch number, or a
+    // hydrated Date if sanitizeDates is ever switched back on.
+    return function (items, ord) {
+        if (!items || !items.length) {
+            return items;
+        }
+        // no field selected is the default state: keep the order the API gave
+        if (!ord || !ord.field) {
+            return items;
+        }
+
+        var dir = ord.direction === 'desc' ? -1 : 1;
+
+        var dateOf = function (item, criterion) {
+            var md = item.metaData;
+            if (!md) {
+                return null;
+            }
+            // the hydrated sibling when it exists, otherwise the raw field
+            var d = md['_' + criterion];
+            if (d === undefined || d === null) {
+                d = md[criterion];
+            }
+            if (d instanceof Date) {
+                return isNaN(d.getTime()) ? null : d.getTime();
+            }
+            if (typeof d === 'number' && !isNaN(d)) {
+                return d;
+            }
+            // some records carry the date as a parsable string, others not at all
+            if (typeof d === 'string' && d !== '') {
+                var t = new Date(d).getTime();
+                return isNaN(t) ? null : t;
+            }
+            return null;
+        };
+
+        var compare = function (a, b) {
+            if (ord.field === 'name') {
+                return String(a.name || '').localeCompare(String(b.name || ''), undefined, { numeric: true, sensitivity: 'base' });
+            }
+            if (ord.field === 'dateCreated' || ord.field === 'dateLastUpdated') {
+                var da = dateOf(a, ord.field), db = dateOf(b, ord.field);
+                // undated cases sort after the dated ones ascending, so they
+                // are pushed to the end regardless of direction
+                if (da === null && db === null) return 0;
+                if (da === null) return dir;
+                if (db === null) return -dir;
+                return da - db;
+            }
+            // uid: string field holding a number, so compare numerically
+            return String(a.uid || '').localeCompare(String(b.uid || ''), undefined, { numeric: true, sensitivity: 'base' });
+        };
+
+        // slice() so the filter never reorders the source array in place —
+        // these are the live tp.testCases / group.testCases references
+        return items.slice().sort(function (a, b) {
+            return compare(a, b) * dir;
+        });
+    };
+});
+
 angular.module('tcl').filter('vaccineEpt', function () {
     return function (items, str) {
         if (!items || !items.length) {
@@ -258,6 +329,7 @@ angular
             $scope.FITS_SERVER = FITSBackEnd;
             $scope.testCases = [];
             $scope.filterView = false;
+            $scope.sortView = false;
             $scope.patientSelected = false;
             $scope.message = "";
             $scope.loadSpin = false;
@@ -1034,6 +1106,46 @@ angular
                     }
                 }
             };
+
+            // field null is the default: the tree keeps the order the API
+            // returned, which is what v1 has always shown
+            $scope.tcOrder = {
+                field : null,
+                direction : 'asc'
+            };
+
+            $scope.tcOrderFields = [
+                { key : null,              label : 'None / default' },
+                { key : 'uid',             label : '#ID' },
+                { key : 'name',            label : 'Name' },
+                { key : 'dateCreated',     label : 'Created' },
+                { key : 'dateLastUpdated', label : 'Last Updated' }
+            ];
+
+            // picking the field already in use flips its direction
+            $scope.setTcOrderField = function (field) {
+                // "None" has no direction to flip; it just drops back to API order
+                if (!field) {
+                    $scope.resetTcOrder($scope.tcOrder);
+                }
+                else if ($scope.tcOrder.field === field) {
+                    $scope.tcOrder.direction = $scope.tcOrder.direction === 'asc' ? 'desc' : 'asc';
+                }
+                else {
+                    $scope.tcOrder.field = field;
+                    $scope.tcOrder.direction = 'asc';
+                }
+            };
+
+            $scope.resetTcOrder = function (o) {
+                o.field = null;
+                o.direction = 'asc';
+            };
+
+            $scope.orderActive = function (o) {
+                return !!(o && o.field);
+            };
+
             $scope.resetTcFilter = function (f) {
                 Object.assign(f,{
                     example : {
@@ -1066,7 +1178,9 @@ angular
                 if(list && Array.isArray(list) && list.length > 0){
                     var wf = $filter('workflow') (list, $scope.tcFilter.wft);
                     var tg = $filter('tags') (wf, $scope.tcFilter.tags);
-                    return $scope.filterActive($scope.tcFilter) ? $filter('tcFilter')(wf, $scope.tcFilter) : tg;
+                    var flt = $scope.filterActive($scope.tcFilter) ? $filter('tcFilter')(wf, $scope.tcFilter) : tg;
+                    // order last, so a filtered list stays ordered
+                    return $filter('tcOrder')(flt, $scope.tcOrder);
                 }
                 else {
                     return [];

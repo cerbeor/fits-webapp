@@ -38,7 +38,7 @@
 	    </div>
 	    <ol ui-tree-nodes dnd-list="tp.testCases" dnd-drop="false" ng-model="tp.testCases">
 		<!--<li data-drag-enabled="false" ng-repeat="tc in  $scope.filterActive(tcFilter) ? (tp.testCases | filter:tcFilter.example | dateMD:tcFilter.dates.created:'dateCreated' | dateMD:tcFilter.dates.updated:'dateLastUpdated' | changed:tcFilter.changed) : tp.testCases" ui-tree-node ng-hide="$parentNodeScope.collapsed">-->
-		<li data-drag-enabled="false" ng-repeat="tc in  tp.testCases | tcFilter:tcFilter | workflow:tcFilter.wft | tags:tcFilter.tags" ui-tree-node
+		<li data-drag-enabled="false" ng-repeat="tc in  tp.testCases | tcFilter:tcFilter | workflow:tcFilter.wft | tags:tcFilter.tags | tcOrder:tcOrder" ui-tree-node
 		    ng-hide="$parentNodeScope.collapsed"
 		    dnd-draggable="tc">
 
@@ -93,7 +93,7 @@
 		    </div>
 		    <ol dnd-list="group.testCases" dnd-drop="false" ui-tree-nodes ng-model="group.testCases">
 			<li data-drag-enabled="false"
-			    ng-repeat="tc in ($parentNodeScope.collapsed ? [] : group._gtc = (group.testCases | tcFilter:tcFilter | workflow:tcFilter.wft | tags:tcFilter.tags)) track by $index"
+			    ng-repeat="tc in ($parentNodeScope.collapsed ? [] : group._gtc = (group.testCases | tcFilter:tcFilter | workflow:tcFilter.wft | tags:tcFilter.tags | tcOrder:tcOrder)) track by $index"
 			    ui-tree-node ng-hide="$parentNodeScope.collapsed"
 			    dnd-draggable="tc">
 

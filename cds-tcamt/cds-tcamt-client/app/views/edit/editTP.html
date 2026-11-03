@@ -64,6 +64,15 @@
 			    <i class="fa fa-filter" aria-hidden="true" style="font-size : 1.8em;"></i>
 			    <md-tooltip md-direction="top">Filter</md-tooltip>
 			</button>
+			<button class="btn btn-xs" ng-class="{ 'btn-info' : sortView, 'btn-primary' : !sortView }"
+				ng-click="sortView = !sortView" style="margin: 0;">
+			    <span ng-style="orderActive(tcOrder) ? { 'background-color' : '#47ef47' } : { 'background-color' : '#ff4040' } "
+				  style="padding: 0 !important; margin-right: 5px; font-size: 10px;" class="badge">&nbsp;</span>
+			    <i class="fa"
+			       ng-class="orderActive(tcOrder) && tcOrder.direction === 'desc' ? 'fa-sort-amount-desc' : 'fa-sort-amount-asc'"
+			       aria-hidden="true" style="font-size : 1.8em;"></i>
+			    <md-tooltip md-direction="top">Order</md-tooltip>
+			</button>
 		    </div>
 		</div>
 		<div layout="column"
@@ -131,6 +140,32 @@
 		    </div>
 		    <button class="btn btn-danger" style="width : 100%;" ng-click="resetTcFilter(tcFilter)">
 			Reset Filter
+		    </button>
+		</div>
+		<div layout="column"
+		     style="width : 100%; background-color : rgb(241,241,241); border: 1px solid #dddddd; padding: 10px;"
+		     ng-show="sortView">
+		    <!-- clicking the field already in use flips its direction, so the
+			 list doubles as the direction control; the radio group below
+			 sets it explicitly -->
+		    <div ng-repeat="f in tcOrderFields" ng-click="setTcOrderField(f.key)"
+			 layout="row" layout-align="start center"
+			 style="cursor: pointer; padding: 4px 2px;">
+			<i class="fa" style="width: 16px; margin-right: 8px;"
+			   ng-class="tcOrder.field === f.key
+				     ? (tcOrder.direction === 'desc' ? 'fa-sort-amount-desc' : 'fa-sort-amount-asc')
+				     : 'fa-sort'"
+			   ng-style="tcOrder.field === f.key ? {} : { 'opacity' : '0.25' }" aria-hidden="true"></i>
+			<span ng-style="tcOrder.field === f.key ? { 'font-weight' : 'bold' } : {}">{{f.label}}</span>
+		    </div>
+		    <div layout="row" layout-align="center center" ng-show="orderActive(tcOrder)">
+			<md-radio-group ng-model="tcOrder.direction" layout="row">
+			    <md-radio-button value="asc" style="margin-right: 20px;">Ascending</md-radio-button>
+			    <md-radio-button value="desc">Descending</md-radio-button>
+			</md-radio-group>
+		    </div>
+		    <button class="btn btn-danger" style="width : 100%;" ng-click="resetTcOrder(tcOrder)">
+			Reset Order
 		    </button>
 		</div>
 		<div  style="width: 100%; box-shadow: 1px 1px 1px 0px; margin-bottom : 5px; text-align: center; background-color: #f3f3f3; border: 1px solid black;"
