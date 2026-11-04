@@ -45,10 +45,9 @@ jobs:
 
       # All Maven traffic goes through our Nexus (anonymous read). The
       # mirrorOf=* also overrides the hardcoded repository URLs some of
-      # these poms still carry from their previous home. Snapshots must stay
-      # enabled: the sibling artifacts are snapshot versions, and whatever
-      # the dependency step below does not build from source is resolved
-      # from here.
+      # these poms still carry from their previous home. The sibling
+      # artifacts (hit-stats-logger, fhirLib, cds-base) are resolved from
+      # here rather than built from source, so snapshots must stay enabled.
       - name: maven settings
         working-directory: .
         run: |
@@ -96,15 +95,18 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository
+          # dependencies.json pins the sibling artifacts built below, so
+          # re-pinning one has to invalidate this cache
           key: m2-${{ hashFiles('**/pom.xml', 'cds-tcamt/cds-tcamt-controller/dependencies.json') }}
           restore-keys: m2-
 
-      # The sibling artifacts (hit-stats-logger, fhirLib, cds-base) are built
-      # from source, in the order cds-tcamt-controller/dependencies.json lists
-      # them and at the commit it pins — the same file dependencies.sh reads,
-      # so adding or re-pinning a dependency needs no change here. Each build
-      # lands in the ~/.m2 cache above, where the war build picks it up;
-      # anything not listed still resolves from Nexus. actions/checkout can't
+      # Not every sibling artifact is published to Nexus, so hit-stats-logger,
+      # fhirLib and cds-base are built from source here, in the order
+      # cds-tcamt-controller/dependencies.json lists them and at the commit it
+      # pins. That is the same file dependencies.sh reads, so adding or
+      # re-pinning a dependency needs no change to this workflow. Each build
+      # installs into the ~/.m2 cache above, where the war build picks it up;
+      # anything not listed still resolves from Nexus. actions/checkout cannot
       # be looped, so this clones directly, and the builds run in the same
       # maven:3.9-eclipse-temurin-8 image as the war so they see the same JDK.
       - name: build dependencies from dependencies.json
@@ -130,19 +132,10 @@ jobs:
               $cmd -B -DskipTests
             echo "::endgroup::"
           done
-          # the container ran as root, so both its clones' outputs and the new
-          # ~/.m2 entries are root-owned on the host
+          # the container ran as root, so both the clones and the new ~/.m2
+          # entries are root-owned on the host
           sudo chown -R "$(id -u):$(id -g)" "$HOME/.m2/repository"
           sudo rm -rf temp-dependencies # keeps the runner (and docker context) clean
-
-      # package-lock.json is what fixes the grunt/uglify toolchain, so it is
-      # the file that must invalidate this cache.
-      - name: cache client toolchain
-        uses: actions/cache@v4
-        with:
-          path: .cache
-          key: client-v2-${{ hashFiles('cds-tcamt/cds-tcamt-client/package-lock.json', 'cds-tcamt/cds-tcamt-client/bower.json') }}
-          restore-keys: client-v2-
 
       # The DAP include reports usage to the federal analytics program and
       # has no place on our hosting. Strip it from the sources before the
@@ -169,78 +162,56 @@ jobs:
       # main.css hash identically to the shipped nist775hit/fits-webapp image).
       # Do not add --no-package-lock here; see the header for what that broke.
       #
-      # Everything here runs as a single uid — the runner's — with HOME and
-      # both caches under /cache, outside the 0700 /root. That combination is
-      # the fix for a three-part failure peculiar to Linux runners.
-      #
-      # npm 6 de-escalates child processes to the owning uid of the working
-      # directory. A Linux bind mount preserves real ownership, so /etc/app
-      # arrives owned by the runner user and npm's children run as that uid
-      # while npm itself stays root. Docker Desktop reports bind mounts as
-      # uid 0, so none of this happens on a laptop and compose never needed
-      # it. Three consequences, each of which had to be fixed:
-      #   - the image's git rewrite lives in /root/.gitconfig and /root is
-      #     mode 0700, so the de-escalated git child cannot read it. Without
-      #     the rewrite, a dep pinned to git://github.com/bessdsv/bower-
-      #     installer.git is fetched over port 9418, which GitHub turned off
-      #     in 2022, and the install hangs until it times out. Hence the
-      #     same rewrite mounted at the world-readable /etc/gitconfig.
-      #   - a cache under /root/.npm is likewise unreachable, so npm falls
-      #     back to ~/.npm and leaves the half-written .staging tree behind
-      #     ("ENOENT ... node_modules/.staging/..."). Hence /cache.
-      #   - with npm root but its children not, the cache dirs root creates
-      #     are unwritable to the git child ("_cacache/tmp/git-clone-...:
-      #     Permission denied"). Hence one uid for the whole run.
-      # HOME must move too: the runner uid has no home in this image, and
-      # npm resolves its cache and config relative to HOME before the env
-      # override applies.
-      #
       # The cache mounts only save downloads; they are keyed by resolved
       # version, so the lockfile still decides what gets installed.
-      #
-      # The mounted /etc/gitconfig is what makes this work on a Linux runner.
-      # One of the tree's deps resolves to git://github.com/bessdsv/bower-
-      # installer.git, and GitHub turned off the git protocol (port 9418) in
-      # 2022, so that URL only works if git rewrites it to https. The image
-      # ships that rewrite in /root/.gitconfig — but /root is mode 0700, and
-      # npm 6 drops privileges to the owning uid of the working directory
-      # before it shells out to git. A Linux bind mount preserves real
-      # ownership, so /etc/app arrives owned by the runner user and the git
-      # child, as that uid, cannot read /root/.gitconfig: the rewrite is
-      # skipped and the fetch hangs until it times out. Docker Desktop reports
-      # bind-mounted files as uid 0, which is why the same command succeeds on
-      # a laptop and why compose never needed this. /etc/gitconfig is the
-      # system-wide file, world-readable, so the rewrite applies whatever uid
-      # npm lands on — no root required, and outputs stay runner-owned.
-      # --user 0:0 alone does NOT fix this: npm's de-escalation keys off the
-      # directory owner, not the current uid.
       - name: build client
         run: |
-          mkdir -p "$GITHUB_WORKSPACE/.cache/npm" "$GITHUB_WORKSPACE/.cache/bower" \
-                   "$GITHUB_WORKSPACE/.cache/home"
+          # package-lock.json still carries bower-installer pinned to a git://
+          # URL. It is not in package.json and no grunt task references it, but
+          # npm walks the whole lockfile, and GitHub turned the git protocol off
+          # in 2022, so the install dies on a port 9418 timeout. A working copy
+          # that already has node_modules never reaches out for it, which is why
+          # this only shows up on a clean runner. git's own insteadOf rewrite
+          # does not help: npm spawns git in a way that bypasses it, proven on
+          # an earlier run where the rewrite was in effect and a manual
+          # ls-remote through it succeeded while npm's identical call still went
+          # out on 9418. The commit is pinned by sha and is untouched, so the
+          # resolved tree is the one the committed lockfile describes and only
+          # the transport differs. The committed file is left alone so it stays
+          # the reference the client toolchain is pinned by.
+          sed -i 's|git://github.com/|git+https://github.com/|g' cds-tcamt-client/package-lock.json
+          grep -q 'git+https://github.com/bessdsv/bower-installer.git#7f9cece1e6fada50f44dc0851e1d85815cd1b4a7' cds-tcamt-client/package-lock.json
+          if grep -q 'git://' cds-tcamt-client/package-lock.json; then
+            echo "a git:// URL survived the rewrite" >&2
+            exit 1
+          fi
           chmod +x dev/in-container-compilation.sh
-          # same rewrite the image carries in /root/.gitconfig, placed where
-          # every uid can read it; see the note above
-          cat > "$RUNNER_TEMP/gitconfig" <<'GITCFG'
-          [url "https://"]
-          	insteadOf = git://
-          [url "https://github.com/"]
-          	insteadOf = git@github.com:
-          GITCFG
+          # Run it the way dev/docker-compose-ui-compilation.yml does: the
+          # repository mounted at /etc/app and nothing else.
+          #
+          # The one thing a runner cannot reproduce on its own is ownership.
+          # npm 6 running as root infers the owner of the package directory and
+          # drops to that uid for its cache and for the git subprocesses it
+          # spawns. On a laptop the bind mount presents as root-owned so npm
+          # stays root; here the checkout belongs to the runner user, npm
+          # demotes itself, and the install dies partway through cloning. The
+          # npm_config_unsafe_perm and npm_config_cache knobs only moved the
+          # failure, because the demotion also applies to the clone. Giving the
+          # tree to root for the duration of the container is what actually
+          # matches the environment the recipe was written for.
+          sudo chown -R 0:0 .
+          rc=0
           docker run --rm --platform linux/amd64 \
-            --user "$(id -u):$(id -g)" \
-            -v "$RUNNER_TEMP/gitconfig:/etc/gitconfig:ro" \
             -v "$PWD:/etc/app" \
-            -v "$GITHUB_WORKSPACE/.cache/npm:/cache/npm" \
-            -v "$GITHUB_WORKSPACE/.cache/bower:/cache/bower" \
-            -v "$GITHUB_WORKSPACE/.cache/home:/cache/home" \
-            -e HOME=/cache/home \
-            -e npm_config_cache=/cache/npm \
-            -e bower_storage__packages=/cache/bower \
             -w /etc/app \
             --entrypoint ./dev/in-container-compilation.sh \
-            nist775hit/fits-dev-environment@sha256:63168e288ada129f2c2ffe97cf967b0b1658dd14241ce073f35f35faf97ecdbd
-          test -f cds-tcamt-controller/src/main/webapp/index.html
+            nist775hit/fits-dev-environment@sha256:63168e288ada129f2c2ffe97cf967b0b1658dd14241ce073f35f35faf97ecdbd || rc=$?
+          # hand the tree back whether or not the build worked, so a failed run
+          # does not leave a workspace the next checkout cannot clean
+          sudo chown -R "$(id -u):$(id -g)" .
+          exit $rc
+      - name: client artifact present
+        run: test -f cds-tcamt-controller/src/main/webapp/index.html
 
       # War from the already-built webapp, resolving every dependency from
       # Nexus. Note the placeholder patching below is now a no-op: commit
